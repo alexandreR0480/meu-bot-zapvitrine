@@ -57,7 +57,19 @@ app.post('/webhook-whatsapp', async (req, res) => {
                     { nome: "Manutenção Megahair", preco: 200, tempo: "90 min" },
                     { nome: "Mesoterapia Capilar", preco: 250, tempo: "60 min" },
                     { nome: "Nutrição Curto", preco: 75, tempo: "35 min" },
-                    { nome: "Nutrição Médio", preco: 80, tempo: "40 min" }
+                    { nome: "Nutrição Médio", preco: 80, tempo: "40 min" },
+                    { nome: "Nutrição Longo", preco: 85, tempo: "90 min" },
+                    { nome: "PAC Escova Longo", preco: 240, tempo: "60 min"},
+                    { nome: "PAC Escova Curto e Médio", preco: 200, tempo: "60 min"},
+                    { nome: "Progressiva Curto Formol", preco: 150, tempo: "180 min"},
+                    { nome: "Progressiva Extra Longo", preco: 200, tempo: "210 min"},
+                    { nome: "Progressiva Longo", preco: 180, tempo: "210 min"},
+                    { nome: "Progressiva Médio", preco: 170, tempo: "180 min"},
+                    { nome: "Reconstrução Curto", preco: 80, tempo: "60 min"},
+                    { nome: "Reconstrução Médio", preco: 100, tempo: "60 min"},
+                    { nome: "Reconstrução Longo", preco: 100, tempo: "80 min"},
+                    { nome: "Tintura 1 Tubo com Escova", preco: 110, tempo: "100 min"},
+                    { nome: "Tintura 2 Tubos", preco: 140, tempo: "100 min"}
                 ];
 
                 if (!sessoesClientes[remoteJid]) {
@@ -65,6 +77,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
                 }
                 let sessao = sessoesClientes[remoteJid];
                 let respostaBot = "";
+                let enviarFotos = false;
 
                 if (sessao.etapa === 'inicio') {
                     if (textoRecebido === '1' || removerAcentos(textoRecebido).includes('servico') || removerAcentos(textoRecebido).includes('corte') || removerAcentos(textoRecebido).includes('agendar')) {
@@ -72,6 +85,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
                         let listaServicos = servicosLoja.map(s => `• *${s.nome}* — R$ ${s.preco.toFixed(2)} (⏱️ ${s.tempo})`).join('\n');
                         respostaBot = `📋 *Nossos Serviços:*\n\n${listaServicos}\n\n👉 Digite o *nome exato* do serviço que deseja agendar:`;
                     } else if (textoRecebido === '2' || removerAcentos(textoRecebido).includes('foto') || removerAcentos(textoRecebido).includes('trabalho') || removerAcentos(textoRecebido).includes('galeria')) {
+                        enviarFotos = true;
                         let listaServicosResumida = servicosLoja.map(s => `• ${s.nome} — R$ ${s.preco.toFixed(2)}`).join('\n');
                         respostaBot = `📁 *Serviços e Galeria do ${nomeLoja}:*\n\n${listaServicosResumida}\n\n👉 Para agendar um serviço, digite 1.`;
                     } else {
@@ -102,18 +116,42 @@ app.post('/webhook-whatsapp', async (req, res) => {
                     sessao.etapa = 'inicio';
                 }
 
+                // Envia a resposta de texto
                 try {
                     await axios.post(`${evolutionApiUrl}/message/sendText/${instanceName}`, {
                         number: remoteJid,
                         text: respostaBot
                     }, {
-                        headers: {
-                            apikey: evolutionApiKey
-                        }
+                        headers: { apikey: evolutionApiKey }
                     });
-                    console.log("Resposta enviada com sucesso para o cliente!");
+
+                    // Se digitou 2, envia as 14 fotos direto do GitHub
+                    if (enviarFotos) {
+                        // ATENÇÃO: Substitua 'SEU_USUARIO' e 'SEU_REPOSITORIO' pelos seus dados reais do GitHub
+                        const baseUrlGit = "https://raw.githubusercontent.com/alexandreR0480/meu-bot-zapvitrine/main/";
+                        
+                        const arquivosImagens = [
+                            "img1.png", "img2.png", "img3.png", "img4.jpeg", "img5.jpeg", 
+                            "img6.jpeg", "img7.jpeg", "img8.jpeg", "img9.jpeg", "img10.jpeg", 
+                            "img11.jpeg", "img12.jpeg", "img13.jpeg", "img14.jpeg"
+                        ];
+
+                        for (let arquivo of arquivosImagens) {
+                            let fotoUrl = baseUrlGit + arquivo;
+                            await axios.post(`${evolutionApiUrl}/message/sendMedia/${instanceName}`, {
+                                number: remoteJid,
+                                mediatype: "image",
+                                media: fotoUrl,
+                                caption: "✨ Trabalho realizado pelo Salão Neurifran"
+                            }, {
+                                headers: { apikey: evolutionApiKey }
+                            });
+                        }
+                        console.log("As 14 fotos da galeria foram enviadas com sucesso!");
+                    }
+
                 } catch (sendError) {
-                    console.error("Erro ao enviar resposta:", sendError.message);
+                    console.error("Erro ao enviar resposta/mídia:", sendError.response?.data || sendError.message);
                 }
             }
         }
