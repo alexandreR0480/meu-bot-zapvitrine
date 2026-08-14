@@ -22,8 +22,15 @@ app.post('/webhook-whatsapp', async (req, res) => {
             const messageContent = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text;
             const fromMe = messageData.key.fromMe;
 
-            if (!fromMe && messageContent) {
+            // TRAVA 1: Ignora mensagens enviadas por você mesmo (fromMe) e ignora GRUPOS (terminados em @g.us)
+            if (fromMe || remoteJid.endsWith('@g.us')) {
+                console.log("Mensagem ignorada (veio de grupo ou de você mesmo).");
+                return res.status(200).json({ status: "ignored" });
+            }
+
+            if (messageContent) {
                 const textoRecebido = messageContent.trim();
+                const textoLimpo = removerAcentos(textoRecebido);
                 console.log(`Mensagem de ${remoteJid}: "${textoRecebido}"`);
 
                 const evolutionApiUrl = "https://labrador-flyer-backlands.ngrok-free.dev"; 
@@ -79,21 +86,28 @@ app.post('/webhook-whatsapp', async (req, res) => {
                 let respostaBot = "";
                 let enviarFotos = false;
 
+                // TRAVA 2: Comando de ativação (O bot só interage se o cliente mandar oi, quero agendar, ativar atendimento, menu, etc., ou se já estiver engajado no fluxo)
+                const palavrasAtivacao = ['oi', 'ola', 'quero agendar', 'agendar', 'atendimento', 'menu', '1', '2'];
+                const ehAtivacao = palavrasAtivacao.some(p => textoLimpo.includes(p));
+
+                if (sessao.etapa === 'inicio' && !ehAtivacao) {
+                    // Se a cliente usa o WhatsApp pessoal e mandam uma conversa normal, o bot ignora
+                    return res.status(200).json({ status: "ignored_personal" });
+                }
+
                 if (sessao.etapa === 'inicio') {
-                    if (textoRecebido === '1' || removerAcentos(textoRecebido).includes('servico') || removerAcentos(textoRecebido).includes('corte') || removerAcentos(textoRecebido).includes('agendar')) {
+                    if (textoRecebido === '1' || textoLimpo.includes('servico') || textoLimpo.includes('corte')) {
                         sessao.etapa = 'escolher_servico';
                         let listaServicos = servicosLoja.map(s => `• *${s.nome}* — R$ ${s.preco.toFixed(2)} (⏱️ ${s.tempo})`).join('\n');
                         respostaBot = `📋 *Nossos Serviços:*\n\n${listaServicos}\n\n👉 Digite o *nome exato* do serviço que deseja agendar:`;
-                    } else if (textoRecebido === '2' || removerAcentos(textoRecebido).includes('foto') || removerAcentos(textoRecebido).includes('trabalho') || removerAcentos(textoRecebido).includes('galeria')) {
+                    } else if (textoRecebido === '2' || textoLimpo.includes('foto') || textoLimpo.includes('trabalho') || textoLimpo.includes('galeria')) {
                         enviarFotos = true;
-                        let listaServicosResumida = servicosLoja.map(s => `• ${s.nome} — R$ ${s.preco.toFixed(2)}`).join('\n');
-                        respostaBot = `📁 *Serviços e Galeria do ${nomeLoja}:*\n\n${listaServicosResumida}\n\n👉 Para agendar um serviço, digite 1.`;
+                        respostaBot = `📂 *Fotos dos Trabalhos Realizados pelo ${nomeLoja}:*`;
                     } else {
                         respostaBot = `Olá! Seja bem-vindo(a) ao atendimento automatizado da *${nomeLoja}*. Como posso te ajudar hoje?\n\nDigite *1* para ver nossos Serviços ou digite *2* para ver fotos dos Trabalhos Realizados.`;
                     }
                 } else if (sessao.etapa === 'escolher_servico') {
-                    let textoBusca = removerAcentos(textoRecebido);
-                    let servicoEncontrado = servicosLoja.find(s => removerAcentos(s.nome).includes(textoBusca));
+                    let servicoEncontrado = servicosLoja.find(s => removerAcentos(s.nome).includes(textoLimpo));
 
                     if (servicoEncontrado) {
                         sessao.servicoEscolhido = servicoEncontrado;
@@ -116,7 +130,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
                     sessao.etapa = 'inicio';
                 }
 
-                // Envia a resposta de texto
+                // Disparo das mensagens via Evolution API
                 try {
                     await axios.post(`${evolutionApiUrl}/message/sendText/${instanceName}`, {
                         number: remoteJid,
@@ -125,11 +139,10 @@ app.post('/webhook-whatsapp', async (req, res) => {
                         headers: { apikey: evolutionApiKey }
                     });
 
-                    // Se digitou 2, envia as 14 fotos direto do GitHub
+                    // Se escolheu a opção 2, envia as 14 fotos e no final a frase solicitada
                     if (enviarFotos) {
-                        // ATENÇÃO: Substitua 'SEU_USUARIO' e 'SEU_REPOSITORIO' pelos seus dados reais do GitHub
+                        // Lembre-se de substituir 'SEU_USUARIO' e 'SEU_REPOSITORIO' pelo seu GitHub real
                         const baseUrlGit = "https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPOSITORIO/main/";
-                        
                         const arquivosImagens = [
                             "img1.png", "img2.png", "img3.png", "img4.jpeg", "img5.jpeg", 
                             "img6.jpeg", "img7.jpeg", "img8.jpeg", "img9.jpeg", "img10.jpeg", 
@@ -142,12 +155,19 @@ app.post('/webhook-whatsapp', async (req, res) => {
                                 number: remoteJid,
                                 mediatype: "image",
                                 media: fotoUrl,
-                                caption: "✨ Trabalho realizado pelo Salão Neurifran"
+                                caption: "✨ Trabalho realizado"
                             }, {
                                 headers: { apikey: evolutionApiKey }
                             });
                         }
-                        console.log("As 14 fotos da galeria foram enviadas com sucesso!");
+
+                        // Mensagem enviada logo após todas as fotos acabarem
+                        await axios.post(`${evolutionApiUrl}/message/sendText/${instanceName}`, {
+                            number: remoteJid,
+                            text: "👉 Para agendar um serviço, digite 1."
+                        }, {
+                            headers: { apikey: evolutionApiKey }
+                        });
                     }
 
                 } catch (sendError) {
