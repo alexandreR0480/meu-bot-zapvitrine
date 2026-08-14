@@ -142,7 +142,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
                     // Se escolheu a opção 2, envia as 14 fotos e no final a frase solicitada
                     if (enviarFotos) {
                         // Lembre-se de substituir 'SEU_USUARIO' e 'SEU_REPOSITORIO' pelo seu GitHub real
-                        const baseUrlGit = "https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPOSITORIO/main/";
+                        const baseUrlGit = "https://raw.githubusercontent.com/alexandreR0480/meu-bot-zapvitrine/main/";
                         const arquivosImagens = [
                             "img1.png", "img2.png", "img3.png", "img4.jpeg", "img5.jpeg", 
                             "img6.jpeg", "img7.jpeg", "img8.jpeg", "img9.jpeg", "img10.jpeg", 
